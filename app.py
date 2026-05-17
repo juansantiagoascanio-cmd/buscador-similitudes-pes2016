@@ -76,49 +76,71 @@ with st.container():
 
 # 4. Procesamiento e índice de similitud matemática
 if buscar:
-    fila_objetivo = df[df["Player Name"] == jugador_seleccionado].iloc[0]
-    id_objetivo = fila_objetivo.name 
+    # Extraer de forma segura los datos y el índice numérico del jugador seleccionado
+    fila_jugador = df[df["Player Name"] == jugador_seleccionado]
     
-    df_filtrado = df[
-        (df["Age"] <= edad_maxima) & 
-        (df["Overall Rating"] <= calificacion_maxima) & 
-        (df["Player Name"] != jugador_seleccionado)
-    ]
-    
-    if df_filtrado.empty:
-        st.warning("No hay jugadores en tu base de datos que cumplan simultáneamente con los filtros de Edad y General establecidos.")
+    if fila_jugador.empty:
+        st.error(f"⚠️ No se encontraron datos para {jugador_seleccionado}.")
     else:
-        columnas_metricas = [
-            'Attacking Prowess', 'Ball Control', 'Dribbling', 'Low Pass', 'Lofted Pass',
-            'Finishing', 'Place Kicking', 'Swerve', 'Header', 'Defensive Prowess',
-            'Ball Winning', 'Kicking Power', 'Speed', 'Explosive Power', 'Body Balance',
-            'Jump', 'Stamina', 'Goalkeeping', 'Catching', 'Clearing', 'Reflexes', 'Coverage'
+        # Obtenemos el índice numérico exacto de la fila
+        id_objetivo = fila_jugador.index[0]
+        fila_objetivo = fila_jugador.iloc[0]
+        
+        # Aplicar filtros de restricciones del usuario
+        df_filtrado = df[
+            (df["Age"] <= edad_maxima) & 
+            (df["Overall Rating"] <= calificacion_maxima) & 
+            (df["Player Name"] != jugador_seleccionado)
         ]
         
-        columnas_metricas = [col for col in columnas_metricas if col in df.columns]
-        
-        df_num = df.copy()
-        for col in columnas_metricas:
-            df_num[col] = pd.to_numeric(df_num[col], errors='coerce').fillna(40)
+        if df_filtrado.empty:
+            st.warning("No hay jugadores en tu base de datos que cumplan simultáneamente con los filtros de Edad y General establecidos.")
+        else:
+            # Atributos nativos de PES 2016 para estructurar los vectores de habilidades
+            columnas_metricas = [
+                'Attacking Prowess', 'Ball Control', 'Dribbling', 'Low Pass', 'Lofted Pass',
+                'Finishing', 'Place Kicking', 'Swerve', 'Header', 'Defensive Prowess',
+                'Ball Winning', 'Kicking Power', 'Speed', 'Explosive Power', 'Body Balance',
+                'Jump', 'Stamina', 'Goalkeeping', 'Catching', 'Clearing', 'Reflexes', 'Coverage'
+            ]
             
-        scaler = MinMaxScaler()
-        df_metricas_norm = scaler.fit_transform(df_num[columnas_metricas])
-        df_norm_completo = pd.DataFrame(df_metricas_norm, columns=columnas_metricas, index=df_num.index)
-        
-        vector_objetivo = df_norm_completo.loc[[id_objetivo]]
-        vectores_filtrados = df_norm_completo.loc[df_filtrado.index]
-        
-        similitudes = cosine_similarity(vectores_filtrados, vector_objetivo)
-        
-        df_filtrado = df_filtrado.copy()
-        df_filtrado["Similitud (%)"] = (similitudes.flatten() * 100).round(2)
-        
-        resultados = df_filtrado.sort_values(by="Similitud (%)", ascending=False).head(int(n_resultados))
-        
-        st.subheader(f"Jugadores más similares a {jugador_seleccionado}:")
-        
-        columnas_visibles = ["Player Name", "Age", "Overall Rating"]
-        if "Team Name" in df.columns:
-            columnas_visibles.append("Team Name")
-        if "Position" in df.columns:
-            columnas_visibles.append
+            # Filtrar solo las columnas de métricas que realmente existan en el DataFrame
+            columnas_metricas = [col for col in columnas_metricas if col in df.columns]
+            
+            df_num = df.copy()
+            for col in columnas_metricas:
+                df_num[col] = pd.to_numeric(df_num[col], errors='coerce').fillna(40)
+                
+            scaler = MinMaxScaler()
+            df_metricas_norm = scaler.fit_transform(df_num[columnas_metricas])
+            df_norm_completo = pd.DataFrame(df_metricas_norm, columns=columnas_metricas, index=df_num.index)
+            
+            # Aislar vectores técnicos basándonos en el índice
+            vector_objetivo = df_norm_completo.loc[[id_objetivo]]
+            vectores_filtrados = df_norm_completo.loc[df_filtrado.index]
+            
+            # Calcular similitud de coseno
+            similitudes = cosine_similarity(vectores_filtrados, vector_objetivo)
+            
+            df_filtrado = df_filtrado.copy()
+            df_filtrado["Similitud (%)"] = (similitudes.flatten() * 100).round(2)
+            
+            # Ordenar de mayor a menor y recortar según la cantidad N solicitada
+            resultados = df_filtrado.sort_values(by="Similitud (%)", ascending=False).head(int(n_resultados))
+            
+            # Renderizar resultados en pantalla
+            st.subheader(f"Jugadores más similares a {jugador_seleccionado}:")
+            
+            # Definir las columnas que queremos mostrar en la tabla final
+            columnas_visibles = ["Player Name", "Age", "Overall Rating"]
+            if "Team Name" in df.columns:
+                columnas_visibles.append("Team Name")
+            if "Position" in df.columns:
+                columnas_visibles.append("Position")
+            if "Nationality" in df.columns:
+                columnas_visibles.append("Nationality")
+                
+            columnas_visibles.append("Similitud (%)")
+            
+            # Mostrar la tabla final limpia
+            st.dataframe(resultados[columnas_visibles], use_container_width=True)
